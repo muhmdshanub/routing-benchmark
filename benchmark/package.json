@@ -1,0 +1,22 @@
+{
+  "name": "routing-benchmark",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Router-only micro-benchmark that accompanies the article on routing algorithms in Node.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=26.13.0"
+  },
+  "scripts": {
+    "bench": "node bench.js",
+    "quick": "node bench.js --quick",
+    "check": "node bench.js --check"
+  },
+  "dependencies": {
+    "express": "5.3.0",
+    "fastify": "5.12.7",
+    "find-my-way": "9.10.0",
+    "hono": "4.13.14",
+    "router": "2.2.0"
+  }
+}
