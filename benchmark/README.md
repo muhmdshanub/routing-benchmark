@@ -12,7 +12,7 @@ npm run check     # correctness only: every router must return the right handler
 npm run bench     # full run, several minutes
 ```
 
-`npm run quick` does a ~30 second smoke test. Its numbers are noisy, so don't quote them.
+`npm run quick` does a smoke test of about a minute. Its numbers are noisy, so don't quote them.
 
 The run writes two files: `results.md` (tables) and `results.json` (everything, including min and max per cell).
 
@@ -24,14 +24,27 @@ The run writes two files: `results.md` (tables) and `results.json` (everything, 
 
 ## What is measured
 
-Routes are registered once. Then, for each router, the script times the match call in a tight loop for four requests: the **first** registered route, the **middle** one, the **last** one, and a path that matches **nothing**. It does this for 10, 100 and 1000 routes, in two scenarios:
+Routes are registered once. Then, for each router, the script times the match call in a tight loop. Each cell is the median of several rounds, in nanoseconds per match. Before any timing, the script checks that every router returns the correct handler and parameters for every request, including a known path with the wrong method, which must not match.
 
-- **static**: `/route0`, `/route1`, ... (request `/route500`)
-- **param**: `/route0/:id`, `/route1/:id`, ... (request `/route500/42`)
+There are three kinds of route table.
 
-Each cell is the median of several rounds, in nanoseconds per match. Before any timing, the script checks that every router returns the correct handler and parameters for all four requests and that `POST` on a `GET` route does not match.
+**Static** (10, 100 and 1000 routes): `GET /route0`, `GET /route1`, ... Requests: the first route, the middle one, the last one, and a path that matches nothing (a miss).
 
-At the end, it also reports setup time: registering 1000 routes plus the first match.
+**Param** (10, 100 and 1000 routes): `GET /route0/:id`, `GET /route1/:id`, ... Same four requests, for example `/route500/42`.
+
+**REST-style API** (about 50 routes and about 500 routes): `GET /health`, `POST /login`, then for every resource seven routes with mixed methods and nested paths:
+
+```
+GET    /res0            POST   /res0
+GET    /res0/:id        PUT    /res0/:id        DELETE /res0/:id
+GET    /res0/:id/items  POST   /res0/:id/items
+```
+
+Requests: `/health` (the first route), a `GET` and a `DELETE` on a resource in the middle, a nested route on the last resource, a miss, a known path with a method that has no route (`PATCH`), and a **mixed** column that rotates through 16 different requests spread over the resources, so the CPU does not see the same request over and over.
+
+At the end, the script also reports setup time: registering the routes plus the first match.
+
+The results file also lists every "noisy" cell, where the five rounds disagreed by more than 10% of the median. Treat those cells with suspicion.
 
 ## The routers
 
@@ -53,7 +66,7 @@ At the end, it also reports setup time: registering 1000 routes plus the first m
 - **Router only.** No HTTP server, no sockets, no parsing, no handler execution, no middleware. A real request costs far more than any number here. This benchmark says nothing about end-to-end throughput.
 - **The Express adapter reaches into internals** (`stack`, `match`, `_handlesMethod`), because the public API only runs a whole request. It excludes request handling, `next()` bookkeeping and parameter processing, so it understates what Express does per request.
 - **Hono's routers are used directly,** not through the `Hono` app object. `SmartRouter` picks its router on the first match; the warm-up covers that.
-- **Each cell repeats one request.** That is friendly to the CPU's branch predictor and caches. Real traffic mixes paths.
+- **Most cells repeat one request.** That is friendly to the CPU's branch predictor and caches. The `mixed` column of the REST-style tables rotates through 16 requests to reduce that effect, but it is still a small, fixed set.
 - **Very large generated functions** (the if/else chain and switch at 1000 routes) may not be optimized the same way as small ones. The script does not investigate why; treat those cells as "what this code does on this engine".
 - **Different machines give different absolute numbers.** Compare routers with each other within one run, not against numbers from someone else's machine.
 - A fast router is only one concern. The article's checklist (conflict rules, 404 vs 405, slashes, case) usually matters more.
